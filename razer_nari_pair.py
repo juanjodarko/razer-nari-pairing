@@ -6,9 +6,9 @@ Razer Nari Wireless Headset Pairing Tool - FINAL WORKING VERSION
 Successfully reverse-engineered pairing tool for Razer Nari headsets.
 Pairs any Nari variant headset with any Nari variant dongle.
 
-✅ TESTED AND WORKING on Linux (Arch)
-✅ Cross-platform (Linux, Windows, macOS)
-✅ Open source alternative to Razer's Windows-only utility
+TESTED AND WORKING on Linux (Arch)
+Cross-platform (Linux, Windows, macOS)
+Open source alternative to Razer's Windows-only utility
 
 Hardware Support:
 - Razer Nari Ultimate (Dongle PID: 0x051A, Headset PID: 0x051B)
@@ -22,19 +22,20 @@ Requirements:
 - Root/sudo access (for USB control)
 
 Usage:
-    sudo python3 razer_nari_pair_FINAL.py
+    sudo python3 razer_nari_pair.py
 
 Author: Community Reverse Engineering Project (2025)
 License: MIT
 Success Date: October 14, 2025
 """
 
-import usb.core
-import usb.util
+import platform
 import sys
 import time
-import platform
 from typing import Optional
+
+import usb.core
+import usb.util
 
 # ============================================================================
 # USB Device Constants
@@ -57,8 +58,8 @@ HEADSET_PIDS = {
 }
 
 # HID Interfaces
-DONGLE_HID_INTERFACE = 5    # Dongle uses Interface 5 for pairing
-HEADSET_HID_INTERFACE = 0   # Headset uses Interface 0 for pairing
+DONGLE_HID_INTERFACE = 5  # Dongle uses Interface 5 for pairing
+HEADSET_HID_INTERFACE = 0  # Headset uses Interface 0 for pairing
 
 # ============================================================================
 # Pairing Commands (Reverse-Engineered from HeadsetDll.dll)
@@ -82,19 +83,22 @@ CMD_CANCEL_PAIR = bytes([0xFF, 0x19, 0x00, 0x49, 0x00, 0x00, 0x00, 0x00])
 # Terminal Colors
 # ============================================================================
 
+
 class Colors:
-    HEADER = '\033[95m'
-    OKBLUE = '\033[94m'
-    OKCYAN = '\033[96m'
-    OKGREEN = '\033[92m'
-    WARNING = '\033[93m'
-    FAIL = '\033[91m'
-    ENDC = '\033[0m'
-    BOLD = '\033[1m'
+    HEADER = "\033[95m"
+    OKBLUE = "\033[94m"
+    OKCYAN = "\033[96m"
+    OKGREEN = "\033[92m"
+    WARNING = "\033[93m"
+    FAIL = "\033[91m"
+    ENDC = "\033[0m"
+    BOLD = "\033[1m"
+
 
 # ============================================================================
 # Helper Functions
 # ============================================================================
+
 
 def print_header():
     print(f"{Colors.HEADER}{Colors.BOLD}")
@@ -104,21 +108,27 @@ def print_header():
     print("=" * 70)
     print(f"{Colors.ENDC}")
 
+
 def print_info(msg: str):
     print(f"{Colors.OKCYAN}[INFO]{Colors.ENDC} {msg}")
+
 
 def print_success(msg: str):
     print(f"{Colors.OKGREEN}[SUCCESS]{Colors.ENDC} {msg}")
 
+
 def print_warning(msg: str):
     print(f"{Colors.WARNING}[WARNING]{Colors.ENDC} {msg}")
+
 
 def print_error(msg: str):
     print(f"{Colors.FAIL}[ERROR]{Colors.ENDC} {msg}")
 
+
 # ============================================================================
 # USB Device Functions
 # ============================================================================
+
 
 def find_device_by_pids(pid_dict: dict) -> Optional[usb.core.Device]:
     """Find first device matching any of the given PIDs"""
@@ -128,6 +138,7 @@ def find_device_by_pids(pid_dict: dict) -> Optional[usb.core.Device]:
             print_success(f"Found: {name} ({RAZER_VID:04X}:{pid:04X})")
             return dev
     return None
+
 
 def claim_interface(dev: usb.core.Device, interface: int) -> bool:
     """Claim USB interface for communication"""
@@ -143,6 +154,7 @@ def claim_interface(dev: usb.core.Device, interface: int) -> bool:
         print_error(f"Failed to claim interface {interface}: {e}")
         return False
 
+
 def release_interface(dev: usb.core.Device, interface: int):
     """Release USB interface"""
     try:
@@ -154,6 +166,7 @@ def release_interface(dev: usb.core.Device, interface: int):
                 pass
     except:
         pass
+
 
 def send_hid_command(dev: usb.core.Device, interface: int, command: bytes) -> bool:
     """
@@ -170,17 +183,12 @@ def send_hid_command(dev: usb.core.Device, interface: int, command: bytes) -> bo
     try:
         # HID SET_REPORT control transfer
         bmRequestType = 0x21  # Host-to-device, Class, Interface
-        bRequest = 0x09       # SET_REPORT
-        wValue = 0x0300       # Feature Report, ID 0
-        wIndex = interface    # Interface number
+        bRequest = 0x09  # SET_REPORT
+        wValue = 0x0300  # Feature Report, ID 0
+        wIndex = interface  # Interface number
 
         result = dev.ctrl_transfer(
-            bmRequestType,
-            bRequest,
-            wValue,
-            wIndex,
-            command,
-            timeout=1000
+            bmRequestType, bRequest, wValue, wIndex, command, timeout=1000
         )
 
         return result == len(command)
@@ -188,9 +196,11 @@ def send_hid_command(dev: usb.core.Device, interface: int, command: bytes) -> bo
         print_error(f"Failed to send command: {e}")
         return False
 
+
 # ============================================================================
 # Pairing Functions
 # ============================================================================
+
 
 def pair_devices() -> bool:
     """
@@ -207,6 +217,7 @@ def pair_devices() -> bool:
 
     # Check for root permissions
     import os
+
     if platform.system() == "Linux" and os.geteuid() != 0:
         print_error("This tool requires root/sudo privileges on Linux")
         print_info("Please run: sudo python3 razer_nari_pair_FINAL.py")
@@ -229,7 +240,9 @@ def pair_devices() -> bool:
     if not headset:
         print_error("No Razer Nari headset found via USB!")
         print()
-        print_warning("The headset MUST be connected via USB charging cable during pairing")
+        print_warning(
+            "The headset MUST be connected via USB charging cable during pairing"
+        )
         print_info("Steps:")
         print_info("  1. Connect headset to PC using USB charging cable")
         print_info("  2. Turn ON the headset (press power button)")
@@ -253,7 +266,7 @@ def pair_devices() -> bool:
         print()
         print(f"{Colors.BOLD}Step 3: Sending Pairing Commands{Colors.ENDC}")
         print()
-        print_info("Command: " + CMD_PAIR.hex(' ').upper())
+        print_info("Command: " + CMD_PAIR.hex(" ").upper())
         print()
 
         # Send pairing command to DONGLE
@@ -275,7 +288,9 @@ def pair_devices() -> bool:
             return False
 
         print()
-        print(f"{Colors.OKGREEN}{Colors.BOLD}✓ Pairing commands sent to both devices!{Colors.ENDC}")
+        print(
+            f"{Colors.OKGREEN}{Colors.BOLD}✓ Pairing commands sent to both devices!{Colors.ENDC}"
+        )
         print()
         print_info("Waiting 5 seconds for devices to exchange pairing data...")
         time.sleep(5)
@@ -294,7 +309,9 @@ def pair_devices() -> bool:
         print("  • You hear a connection sound in the headset")
         print("  • Audio works wirelessly!")
         print()
-        print(f"{Colors.BOLD}The pairing is now PERMANENT - devices remember each other!{Colors.ENDC}")
+        print(
+            f"{Colors.BOLD}The pairing is now PERMANENT - devices remember each other!{Colors.ENDC}"
+        )
         print()
 
         return True
@@ -305,9 +322,11 @@ def pair_devices() -> bool:
         release_interface(dongle, DONGLE_HID_INTERFACE)
         print_info("Released all interfaces")
 
+
 # ============================================================================
 # Main Entry Point
 # ============================================================================
+
 
 def main():
     """Main function"""
@@ -329,7 +348,9 @@ def main():
             print()
             sys.exit(0)
         else:
-            print(f"{Colors.FAIL}Pairing failed. Please check the instructions above.{Colors.ENDC}")
+            print(
+                f"{Colors.FAIL}Pairing failed. Please check the instructions above.{Colors.ENDC}"
+            )
             sys.exit(1)
 
     except KeyboardInterrupt:
@@ -340,8 +361,10 @@ def main():
         print()
         print_error(f"Unexpected error: {e}")
         import traceback
+
         traceback.print_exc()
         sys.exit(1)
+
 
 if __name__ == "__main__":
     main()
