@@ -1,0 +1,2 @@
+# Razer Nari Pairing Tool - Requirements
+pyusb>=1.2.1
