@@ -118,12 +118,26 @@ class ColoredFormatter(logging.Formatter):
 
 def setup_logging(verbose: bool = False):
     level = logging.DEBUG if verbose else logging.INFO
-    handler = logging.StreamHandler()
-    handler.setFormatter(ColoredFormatter())
     logger.setLevel(level)
-    logger.addHandler(handler)
+    # Prevent messages from being propagated to the root logger and
+    # potentially logged twice if the root logger has handlers configured.
+    logger.propagate = False
 
+    # Avoid adding duplicate StreamHandlers if setup_logging is called
+    # multiple times (e.g. in tests or interactive sessions).
+    stream_handler_exists = any(
+        isinstance(h, logging.StreamHandler) for h in logger.handlers
+    )
 
+    if not stream_handler_exists:
+        handler = logging.StreamHandler()
+        handler.setFormatter(ColoredFormatter())
+        logger.addHandler(handler)
+    else:
+        # Ensure existing StreamHandlers use the expected formatter.
+        for handler in logger.handlers:
+            if isinstance(handler, logging.StreamHandler):
+                handler.setFormatter(ColoredFormatter())
 def print_header():
     print(f"{HEADER_COLOR}{BOLD}")
     print("=" * 70)
