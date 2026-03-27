@@ -110,7 +110,10 @@ class ColoredFormatter(logging.Formatter):
     def format(self, record: logging.LogRecord) -> str:
         color = LEVEL_COLORS.get(record.levelno, "")
         tag = record.levelname
-        return f"{color}[{tag}]{RESET} {record.getMessage()}"
+        # Use the base Formatter to include exception information and any
+        # other standard formatting, then add color around the result.
+        base_message = super().format(record)
+        return f"{color}[{tag}]{RESET} {base_message}"
 
 
 def setup_logging(verbose: bool = False):
