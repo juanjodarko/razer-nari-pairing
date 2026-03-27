@@ -158,7 +158,7 @@ def find_device_by_pids(pid_dict: dict) -> Optional[usb.core.Device]:
         logger.debug("Looking for %s (VID=%04X, PID=%04X)", name, RAZER_VID, pid)
         dev = usb.core.find(idVendor=RAZER_VID, idProduct=pid)
         if dev:
-            logger.log(SUCCESS, f"Found: {name} ({RAZER_VID:04X}:{pid:04X})")
+            logger.log(SUCCESS, "Found: %s (%04X:%04X)", name, RAZER_VID, pid)
             return dev
     return None
 
