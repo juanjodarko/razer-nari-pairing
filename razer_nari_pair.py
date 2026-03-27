@@ -6,7 +6,7 @@ Razer Nari Wireless Headset Pairing Tool - FINAL WORKING VERSION
 Successfully reverse-engineered pairing tool for Razer Nari headsets.
 Pairs any Nari variant headset with any Nari variant dongle.
 
-TESTED AND WORKING on Linux (Arch)
+TESTED AND WORKING on Linux (Arch) - Nari Regular and Nari Ultimate
 Cross-platform (Linux, Windows, macOS)
 Open source alternative to Razer's Windows-only utility
 
@@ -29,6 +29,9 @@ License: MIT
 Success Date: October 14, 2025
 """
 
+import argparse
+import logging
+import os
 import platform
 import sys
 import time
@@ -36,6 +39,12 @@ from typing import Optional
 
 import usb.core
 import usb.util
+
+# Custom log level for SUCCESS messages (between INFO and WARNING)
+SUCCESS = 25
+logging.addLevelName(SUCCESS, "SUCCESS")
+
+logger = logging.getLogger("razer_nari_pair")
 
 # ============================================================================
 # USB Device Constants
@@ -80,49 +89,45 @@ CMD_PAIR = bytes([0xFF, 0x19, 0x00, 0x40, 0x00, 0x00, 0x00, 0x00])
 CMD_CANCEL_PAIR = bytes([0xFF, 0x19, 0x00, 0x49, 0x00, 0x00, 0x00, 0x00])
 
 # ============================================================================
-# Terminal Colors
+# Logging Setup
 # ============================================================================
 
+BOLD = "\033[1m"
+RESET = "\033[0m"
 
-class Colors:
-    HEADER = "\033[95m"
-    OKBLUE = "\033[94m"
-    OKCYAN = "\033[96m"
-    OKGREEN = "\033[92m"
-    WARNING = "\033[93m"
-    FAIL = "\033[91m"
-    ENDC = "\033[0m"
-    BOLD = "\033[1m"
+LEVEL_COLORS = {
+    logging.DEBUG: "\033[90m",     # Grey
+    logging.INFO: "\033[96m",      # Cyan
+    SUCCESS: "\033[92m",           # Green
+    logging.WARNING: "\033[93m",   # Yellow
+    logging.ERROR: "\033[91m",     # Red
+}
+
+HEADER_COLOR = "\033[95m"
 
 
-# ============================================================================
-# Helper Functions
-# ============================================================================
+class ColoredFormatter(logging.Formatter):
+    def format(self, record: logging.LogRecord) -> str:
+        color = LEVEL_COLORS.get(record.levelno, "")
+        tag = record.levelname
+        return f"{color}[{tag}]{RESET} {record.getMessage()}"
+
+
+def setup_logging(verbose: bool = False):
+    level = logging.DEBUG if verbose else logging.INFO
+    handler = logging.StreamHandler()
+    handler.setFormatter(ColoredFormatter())
+    logger.setLevel(level)
+    logger.addHandler(handler)
 
 
 def print_header():
-    print(f"{Colors.HEADER}{Colors.BOLD}")
+    print(f"{HEADER_COLOR}{BOLD}")
     print("=" * 70)
     print("Razer Nari Wireless Pairing Tool")
     print("Community Open-Source Implementation - FINAL VERSION")
     print("=" * 70)
-    print(f"{Colors.ENDC}")
-
-
-def print_info(msg: str):
-    print(f"{Colors.OKCYAN}[INFO]{Colors.ENDC} {msg}")
-
-
-def print_success(msg: str):
-    print(f"{Colors.OKGREEN}[SUCCESS]{Colors.ENDC} {msg}")
-
-
-def print_warning(msg: str):
-    print(f"{Colors.WARNING}[WARNING]{Colors.ENDC} {msg}")
-
-
-def print_error(msg: str):
-    print(f"{Colors.FAIL}[ERROR]{Colors.ENDC} {msg}")
+    print(RESET)
 
 
 # ============================================================================
@@ -133,9 +138,10 @@ def print_error(msg: str):
 def find_device_by_pids(pid_dict: dict) -> Optional[usb.core.Device]:
     """Find first device matching any of the given PIDs"""
     for pid, name in pid_dict.items():
+        logger.debug("Looking for %s (VID=%04X, PID=%04X)", name, RAZER_VID, pid)
         dev = usb.core.find(idVendor=RAZER_VID, idProduct=pid)
         if dev:
-            print_success(f"Found: {name} ({RAZER_VID:04X}:{pid:04X})")
+            logger.log(SUCCESS, f"Found: {name} ({RAZER_VID:04X}:{pid:04X})")
             return dev
     return None
 
@@ -145,13 +151,14 @@ def claim_interface(dev: usb.core.Device, interface: int) -> bool:
     try:
         if platform.system() == "Linux":
             if dev.is_kernel_driver_active(interface):
+                logger.debug("Detaching kernel driver from interface %d", interface)
                 dev.detach_kernel_driver(interface)
 
         usb.util.claim_interface(dev, interface)
-        print_info(f"Claimed interface {interface}")
+        logger.info("Claimed interface %d", interface)
         return True
     except Exception as e:
-        print_error(f"Failed to claim interface {interface}: {e}")
+        logger.error("Failed to claim interface %d: %s", interface, e)
         return False
 
 
@@ -162,9 +169,9 @@ def release_interface(dev: usb.core.Device, interface: int):
         if platform.system() == "Linux":
             try:
                 dev.attach_kernel_driver(interface)
-            except:
+            except Exception:
                 pass
-    except:
+    except Exception:
         pass
 
 
@@ -187,13 +194,19 @@ def send_hid_command(dev: usb.core.Device, interface: int, command: bytes) -> bo
         wValue = 0x0300  # Feature Report, ID 0
         wIndex = interface  # Interface number
 
+        logger.debug(
+            "ctrl_transfer: bmRequestType=0x%02X bRequest=0x%02X "
+            "wValue=0x%04X wIndex=%d data=%s",
+            bmRequestType, bRequest, wValue, wIndex, command.hex(" "),
+        )
         result = dev.ctrl_transfer(
             bmRequestType, bRequest, wValue, wIndex, command, timeout=1000
         )
+        logger.debug("ctrl_transfer returned %d (expected %d)", result, len(command))
 
         return result == len(command)
     except Exception as e:
-        print_error(f"Failed to send command: {e}")
+        logger.error("Failed to send command: %s", e)
         return False
 
 
@@ -216,41 +229,39 @@ def pair_devices() -> bool:
     print()
 
     # Check for root permissions
-    import os
-
     if platform.system() == "Linux" and os.geteuid() != 0:
-        print_error("This tool requires root/sudo privileges on Linux")
-        print_info("Please run: sudo python3 razer_nari_pair_FINAL.py")
+        logger.error("This tool requires root/sudo privileges on Linux")
+        logger.info("Please run: sudo python3 razer_nari_pair.py")
         return False
 
-    print(f"{Colors.BOLD}Step 1: Checking Hardware{Colors.ENDC}")
+    print(f"{BOLD}Step 1: Checking Hardware{RESET}")
     print()
 
     # Find dongle
-    print_info("Searching for dongle...")
+    logger.info("Searching for dongle...")
     dongle = find_device_by_pids(DONGLE_PIDS)
     if not dongle:
-        print_error("No Razer Nari dongle found!")
-        print_info("Please plug in the USB dongle and try again")
+        logger.error("No Razer Nari dongle found!")
+        logger.info("Please plug in the USB dongle and try again")
         return False
 
     # Find headset (must be USB-connected via charging cable)
-    print_info("Searching for headset (via USB charging cable)...")
+    logger.info("Searching for headset (via USB charging cable)...")
     headset = find_device_by_pids(HEADSET_PIDS)
     if not headset:
-        print_error("No Razer Nari headset found via USB!")
+        logger.error("No Razer Nari headset found via USB!")
         print()
-        print_warning(
+        logger.warning(
             "The headset MUST be connected via USB charging cable during pairing"
         )
-        print_info("Steps:")
-        print_info("  1. Connect headset to PC using USB charging cable")
-        print_info("  2. Turn ON the headset (press power button)")
-        print_info("  3. Run this tool again")
+        logger.info("Steps:")
+        logger.info("  1. Connect headset to PC using USB charging cable")
+        logger.info("  2. Turn ON the headset (press power button)")
+        logger.info("  3. Run this tool again")
         return False
 
     print()
-    print(f"{Colors.BOLD}Step 2: Preparing Devices{Colors.ENDC}")
+    print(f"{BOLD}Step 2: Preparing Devices{RESET}")
     print()
 
     # Claim dongle interface
@@ -264,53 +275,53 @@ def pair_devices() -> bool:
 
     try:
         print()
-        print(f"{Colors.BOLD}Step 3: Sending Pairing Commands{Colors.ENDC}")
+        print(f"{BOLD}Step 3: Sending Pairing Commands{RESET}")
         print()
-        print_info("Command: " + CMD_PAIR.hex(" ").upper())
+        logger.info("Command: %s", CMD_PAIR.hex(" ").upper())
         print()
 
         # Send pairing command to DONGLE
-        print_info("Sending pairing command to dongle...")
+        logger.info("Sending pairing command to dongle...")
         if send_hid_command(dongle, DONGLE_HID_INTERFACE, CMD_PAIR):
-            print_success("Dongle command sent successfully")
+            logger.log(SUCCESS, "Dongle command sent successfully")
         else:
-            print_error("Failed to send command to dongle")
+            logger.error("Failed to send command to dongle")
             return False
 
         time.sleep(1)
 
         # Send pairing command to HEADSET
-        print_info("Sending pairing command to headset...")
+        logger.info("Sending pairing command to headset...")
         if send_hid_command(headset, HEADSET_HID_INTERFACE, CMD_PAIR):
-            print_success("Headset command sent successfully")
+            logger.log(SUCCESS, "Headset command sent successfully")
         else:
-            print_error("Failed to send command to headset")
+            logger.error("Failed to send command to headset")
             return False
 
         print()
         print(
-            f"{Colors.OKGREEN}{Colors.BOLD}✓ Pairing commands sent to both devices!{Colors.ENDC}"
+            f"\033[92m{BOLD}✓ Pairing commands sent to both devices!{RESET}"
         )
         print()
-        print_info("Waiting 5 seconds for devices to exchange pairing data...")
+        logger.info("Waiting 5 seconds for devices to exchange pairing data...")
         time.sleep(5)
 
         print()
-        print(f"{Colors.BOLD}Step 4: Testing Wireless Connection{Colors.ENDC}")
+        print(f"{BOLD}Step 4: Testing Wireless Connection{RESET}")
         print()
-        print(f"{Colors.OKGREEN}Next steps:{Colors.ENDC}")
+        print(f"\033[92mNext steps:{RESET}")
         print("  1. Disconnect the headset USB cable")
         print("  2. Turn the headset OFF (hold power button)")
         print("  3. Turn the headset ON")
         print("  4. The headset should connect wirelessly to the dongle!")
         print()
-        print(f"{Colors.OKGREEN}Expected result:{Colors.ENDC}")
+        print(f"\033[92mExpected result:{RESET}")
         print("  • Headset LED turns solid blue (connected)")
         print("  • You hear a connection sound in the headset")
         print("  • Audio works wirelessly!")
         print()
         print(
-            f"{Colors.BOLD}The pairing is now PERMANENT - devices remember each other!{Colors.ENDC}"
+            f"{BOLD}The pairing is now PERMANENT - devices remember each other!{RESET}"
         )
         print()
 
@@ -320,7 +331,7 @@ def pair_devices() -> bool:
         # Release interfaces
         release_interface(headset, HEADSET_HID_INTERFACE)
         release_interface(dongle, DONGLE_HID_INTERFACE)
-        print_info("Released all interfaces")
+        logger.info("Released all interfaces")
 
 
 # ============================================================================
@@ -328,17 +339,30 @@ def pair_devices() -> bool:
 # ============================================================================
 
 
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(
+        description="Razer Nari Wireless Headset Pairing Tool"
+    )
+    parser.add_argument(
+        "-v", "--verbose", action="store_true", help="Enable debug output"
+    )
+    return parser.parse_args()
+
+
 def main():
     """Main function"""
+    args = parse_args()
+    setup_logging(verbose=args.verbose)
+
     try:
         success = pair_devices()
 
         print()
         if success:
-            print(f"{Colors.OKGREEN}{Colors.BOLD}=" * 70)
+            print(f"\033[92m{BOLD}=" * 70)
             print("PAIRING COMPLETE! 🎉")
             print("=" * 70)
-            print(f"{Colors.ENDC}")
+            print(RESET)
             print()
             print("Your headset is now paired with the dongle!")
             print("From now on, just:")
@@ -349,20 +373,17 @@ def main():
             sys.exit(0)
         else:
             print(
-                f"{Colors.FAIL}Pairing failed. Please check the instructions above.{Colors.ENDC}"
+                f"\033[91mPairing failed. Please check the instructions above.{RESET}"
             )
             sys.exit(1)
 
     except KeyboardInterrupt:
         print()
-        print_info("Interrupted by user")
+        logger.info("Interrupted by user")
         sys.exit(0)
-    except Exception as e:
+    except Exception:
         print()
-        print_error(f"Unexpected error: {e}")
-        import traceback
-
-        traceback.print_exc()
+        logger.exception("Unexpected error")
         sys.exit(1)
 
 

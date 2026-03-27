@@ -8,11 +8,16 @@ Pairs any Razer Nari headset variant with any Razer Nari dongle variant, bypassi
 
 **Supported Hardware:**
 
-- Razer Nari Ultimate **NOT TESTED** (likely works, needs verification)
+- Razer Nari Ultimate **TESTED** (confirmed working - thanks [@grumblefoot](https://github.com/grumblefoot) and [@rashidcultura](https://github.com/rashidcultura)!)
 - Razer Nari (Regular) **TESTED** (confirmed working)
 - Razer Nari Essential **NOT TESTED** (likely works, needs verification)
 
-**Note**: The pairing command was extracted from Razer's official utility which supports all Nari variants, and cross-model pairing has been confirmed working (Regular + Ultimate dongle). However, Ultimate and Essential models have not been directly tested yet. If you have these models, please test and report your results!
+**Tested Distros:**
+
+- Arch Linux
+- CachyOS (see [CachyOS notes](#cachyos--strict-pep-668-distros) below)
+
+**Note**: The pairing command was extracted from Razer's official utility which supports all Nari variants, and cross-model pairing has been confirmed working (Regular + Ultimate dongle). If you have a Nari Essential, please test and report your results!
 
 ## Quick Start
 
@@ -134,6 +139,19 @@ This tool was created through reverse engineering of the Razer Nari pairing prot
 - Try running the pairing tool again
 - Make sure headset was ON when commands were sent
 
+### CachyOS / strict PEP 668 distros
+
+Some distros (CachyOS, Fedora 38+, Ubuntu 23.04+) enforce [PEP 668](https://peps.python.org/pep-0668/) and block global pip installs. Use a virtual environment instead:
+
+```bash
+python3 -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt    # use -v flag if install seems to hang
+sudo venv/bin/python3 razer_nari_pair.py
+```
+
+*(Thanks [@rashidcultura](https://github.com/rashidcultura) for testing on CachyOS!)*
+
 ### No audio
 
 - On Linux, check PulseAudio/PipeWire:
@@ -188,7 +206,7 @@ MIT License - See [LICENSE](LICENSE) file for details.
 
 **Priority areas:**
 
-- **Hardware testing** - Razer Nari Ultimate and Essential variants need testing
+- **Hardware testing** - Razer Nari Essential variant needs testing
 - **Bug reports** - Found an issue? Let us know!
 - **Code contributions** - Bug fixes, features, platform support
 - **Documentation** - Improvements, translations, troubleshooting tips
